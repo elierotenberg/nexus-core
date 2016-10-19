@@ -1,0 +1,16 @@
+{
+  "ignore": "dist/**/*",
+  "plugins": [
+    ["transform-async-to-module-method", {
+      "module": "bluebird",
+      "method": "coroutine",
+    }],
+    "transform-node-env-inline",
+    "transform-object-rest-spread",
+    "transform-class-properties",
+    "transform-runtime"
+  ],
+  "presets": [
+    "latest"
+  ]
+}
