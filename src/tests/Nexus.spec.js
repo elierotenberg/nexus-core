@@ -3,19 +3,19 @@ const { describe, it } = global;
 import t from 'tcomb';
 import equal from 'deep-equal';
 
-import { Nexus, when, logger, Cache } from '../';
+import nxs, { logger, Cache } from '../';
 
 describe('Nexus', async () => {
   const echo = () => async (params) => params;
 
   it('hello world inline middleware', async () => {
-    const n = new Nexus().use(async () => 'hello world');
+    const n = nxs().use(async () => 'hello world');
     const r = await n.query();
     t.assert(r === 'hello world');
   });
 
   it('echo middleware', async () => {
-    const n = new Nexus().use(echo());
+    const n = nxs().use(echo());
     const r = await n.query({ foo: 'bar' });
     t.assert(equal(r, { foo: 'bar' }));
   });
@@ -23,7 +23,7 @@ describe('Nexus', async () => {
   it('logger', async () => {
     const fnCalls = [];
     const fn = (...args) => fnCalls.push(args);
-    const n = new Nexus()
+    const n = nxs()
       .use(logger(fn))
       .use(logger(fn))
       .use(echo())
@@ -39,17 +39,25 @@ describe('Nexus', async () => {
   });
 
   it('when', async () => {
-    const n = new Nexus()
-      .use(when((params) => params === 'foo', async () => 'bar'));
-    const r1 = await n.query('foo');
-    const r2 = await n.query();
-    t.assert(r1 === 'bar', 'r1 === bar');
-    t.assert(r2 === void 0, 'r2 === bar');
+    const n = nxs()
+      .when((params) => params === 'foo', nxs(async () => 'bar'))
+      .when((params) => params === 'fizz', nxs(async () => 'buzz'))
+      .use(echo());
+    const r = await Promise.all([
+      n.query('foo'),
+      n.query('fizz'),
+      n.query('foobar'),
+    ]);
+    t.assert(equal(r, [
+      'bar',
+      'buzz',
+      'foobar',
+    ]));
   });
 
   it('Cache', async () => {
     const c = new Cache();
-    const n = new Nexus()
+    const n = nxs()
       .use(c.cache())
       .use(echo());
     const r = [

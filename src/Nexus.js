@@ -1,48 +1,54 @@
+import composeMiddlewares from './composeMiddlewares';
+
 class Nexus {
-  constructor() {
-    this._middlewares = [];
-    this._transactions = new Set();
-    this._nextTransactionId = 0;
-    this._processQueryWithinTransaction = this._processQueryWithinTransaction.bind(this);
+  constructor(initialMiddleware = (params, state, next) => next(state)) {
+    this._pendingTransactionsCount = 0;
+    if(typeof initialMiddleware !== 'function') {
+      throw new Error('Only a function may be used as a middleware.');
+    }
+    this._middleware = initialMiddleware;
+    this._chain = (params, state, next) => this._transaction(() => this._middleware(params, state, next));
   }
 
   use(middleware) {
     if(typeof middleware !== 'function') {
       throw new Error('Only a function may be used as a middleware.');
     }
-    if(!this._transactions.size === 0) {
+    if(this._pendingTransactionsCount > 0) {
       throw new Error('No middleware can be added while a transaction is running.');
     }
-    this._middlewares.push(middleware.bind(null));
+    this._middleware = composeMiddlewares(this._middleware, middleware.bind(null));
     return this;
   }
 
-  async _transaction(fn, ...args) {
-    const transactionId = this._nextTransactionId;
-    this._nextTransactionId = this._nextTransactionId + 1;
-    this._transactions.add(transactionId);
+  async _transaction(fn) {
+    this._pendingTransactionsCount = this._pendingTransactionsCount + 1;
     try {
-      return await fn(...args);
+      return await fn();
     }
     finally {
-      this._transactions.delete(transactionId);
+      this._pendingTransactionsCount = this._pendingTransactionsCount - 1;
     }
   }
 
-  _processMiddleware(params, state, middlewareIndex) {
-    if(middlewareIndex === this._middlewares.length) {
-      return Promise.resolve(void 0);
+  when(predicate, otherNexus) {
+    if(typeof predicate !== 'function') {
+      throw new Error('predicate should be a function.');
     }
-    const next = (nextState) => this._processMiddleware(params, nextState, middlewareIndex + 1);
-    return this._middlewares[middlewareIndex](params, state, next);
+    if(!(otherNexus instanceof Nexus)) {
+      throw new Error('otherNexus should be an instance of Nexus');
+    }
+    return this.use(async (params, state, next) => {
+      let p = predicate(params, state);
+      if(p && typeof p === 'object' && typeof p.then === 'function') {
+        p = await p;
+      }
+      return p ? await otherNexus.query(params, state) : await next(state);
+    });
   }
 
-  _processQueryWithinTransaction(params, initialState) {
-    return this._processMiddleware(params, initialState, 0);
-  }
-
-  query(params, initialState = {}) {
-    return this._transaction(this._processQueryWithinTransaction, params, initialState);
+  query(params, state = {}) {
+    return this._chain(params, state, () => Promise.resolve(void 0));
   }
 }
 
