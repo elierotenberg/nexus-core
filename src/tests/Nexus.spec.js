@@ -1,11 +1,73 @@
+/* eslint-disable no-magic-numbers */
 const { describe, it } = global;
 import t from 'tcomb';
+import equal from 'deep-equal';
 
-import { Nexus } from '../';
+import { Nexus, when, logger, Cache } from '../';
 
 describe('Nexus', async () => {
-  it('#constructor', () => {
-    const n = new Nexus();
-    t.assert(n instanceof Nexus);
+  const echo = () => async (params) => params;
+
+  it('hello world inline middleware', async () => {
+    const n = new Nexus().use(async () => 'hello world');
+    const r = await n.query();
+    t.assert(r === 'hello world');
+  });
+
+  it('echo middleware', async () => {
+    const n = new Nexus().use(echo());
+    const r = await n.query({ foo: 'bar' });
+    t.assert(equal(r, { foo: 'bar' }));
+  });
+
+  it('logger', async () => {
+    const fnCalls = [];
+    const fn = (...args) => fnCalls.push(args);
+    const n = new Nexus()
+      .use(logger(fn))
+      .use(logger(fn))
+      .use(echo())
+      .use(logger(fn));
+    const r = await n.query({ foo: 'bar' });
+    t.assert(equal(r, { foo: 'bar' }));
+    t.assert(equal(fnCalls, [
+      ['>', { params: { foo: 'bar' }, state: {} }],
+      ['>>', { params: { foo: 'bar' }, state: { __NEXUS_LOGGER_DEPTH__: 1 } }],
+      ['<<', { res: { foo: 'bar' } }],
+      ['<', { res: { foo: 'bar' } }],
+    ]));
+  });
+
+  it('when', async () => {
+    const n = new Nexus()
+      .use(when((params) => params === 'foo', async () => 'bar'));
+    const r1 = await n.query('foo');
+    const r2 = await n.query();
+    t.assert(r1 === 'bar', 'r1 === bar');
+    t.assert(r2 === void 0, 'r2 === bar');
+  });
+
+  it('Cache', async () => {
+    const c = new Cache();
+    const n = new Nexus()
+      .use(c.cache())
+      .use(echo());
+    const r = [
+      await n.query('foo'),
+      await n.query('bar'),
+      await n.query('foo'),
+      await n.query('fizz'),
+    ];
+    t.assert(equal(r, [
+      'foo',
+      'bar',
+      'foo',
+      'fizz',
+    ]));
+    t.assert(c.size() === 3);
+    c.purge('foo');
+    t.assert(c.size() === 2);
+    c.clear();
+    t.assert(c.size() === 0);
   });
 });
