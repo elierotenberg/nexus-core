@@ -1,6 +1,6 @@
 {
   "name": "nexus-core",
-  "version": "0.0.0",
+  "version": "0.0.0-dev0",
   "description": "Middleware-based unified async interface for modern javascript apps",
   "main": "dist/index.js",
   "repository": {

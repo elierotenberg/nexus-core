@@ -27,3 +27,5 @@ gulp.task('test', ['lint', 'build'], () =>
   gulp.src(tests, { read: false })
     .pipe(mocha())
 );
+
+gulp.task('default', ['build']);
